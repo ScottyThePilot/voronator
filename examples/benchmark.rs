@@ -1,117 +1,106 @@
 extern crate voronator;
 
+use std::f64;
+use std::time::{Duration, Instant};
+
 use rand::distributions::Uniform;
 use rand::Rng;
 use rand_distr::StandardNormal;
-use std::time::{Duration, Instant};
-use voronator::delaunator;
+use voronator::delaunator::Triangulation;
+use voronator::Point;
 
-use std::f64;
-
-fn report(n: usize, elapsed: Duration, t: &delaunator::Triangulation) {
-    println!(
-        "  {} points ({} tris, {} hull points): {}.{}ms.",
-        n,
-        t.len(),
-        t.hull.len(),
-        elapsed.as_millis(),
-        elapsed.subsec_micros()
-    );
+fn report(n: usize, elapsed: Duration, t: &Triangulation) {
+  println!(
+    "{} points ({} tris, {} hull points): {}.{}ms.",
+    n,
+    t.triangles_count(),
+    t.hull.len(),
+    elapsed.as_millis(),
+    elapsed.subsec_micros()
+  );
 }
 
 fn uniform(count: &[usize]) {
-    let mut rng = rand::thread_rng();
-    let range = Uniform::new(0., 1000.);
+  let mut rng = rand::thread_rng();
+  let range = Uniform::new(0.0, 1000.0);
 
-    println!("Uniform distribution:");
+  println!("Uniform distribution:");
 
-    for c in count {
-        let points: Vec<delaunator::Point> = (0..*c)
-            .map(|_| delaunator::Point {
-                x: rng.sample(&range),
-                y: rng.sample(&range),
-            })
-            .collect();
+  for &c in count {
+    let points = (0..c)
+      .map(|_| Point::new(rng.sample(&range), rng.sample(&range)))
+      .collect::<Vec<Point>>();
 
-        let now = Instant::now();
-        let t = delaunator::triangulate(&points).expect("No triangulation exists for this input.");
-        let elapsed = now.elapsed();
+    let now = Instant::now();
+    let t = Triangulation::new(&points).expect("No triangulation exists for this input.");
+    let elapsed = now.elapsed();
 
-        report(points.len(), elapsed, &t);
-    }
+    report(points.len(), elapsed, &t);
+  }
 }
 
 fn gaussian(count: &[usize]) {
-    let mut rng = rand::thread_rng();
+  let mut rng = rand::thread_rng();
 
-    println!("Gaussian distribution:");
+  println!("Gaussian distribution:");
 
-    for c in count {
-        let points: Vec<delaunator::Point> = (0..*c)
-            .map(|_| delaunator::Point {
-                x: rng.sample::<f64, StandardNormal>(StandardNormal) * 1000.,
-                y: rng.sample::<f64, StandardNormal>(StandardNormal) * 1000.,
-            })
-            .collect();
+  for &c in count {
+    let points = (0..c)
+      .map(|_| Point::new(rng.sample(StandardNormal), rng.sample(StandardNormal)) * 1000.0)
+      .collect::<Vec<Point>>();
 
-        let now = Instant::now();
-        let t = delaunator::triangulate(&points).expect("No triangulation exists for this input.");
-        let elapsed = now.elapsed();
+    let now = Instant::now();
+    let t = Triangulation::new(&points).expect("No triangulation exists for this input.");
+    let elapsed = now.elapsed();
 
-        report(points.len(), elapsed, &t);
-    }
+    report(points.len(), elapsed, &t);
+  }
 }
 
 fn grid(count: &[usize]) {
-    println!("Grid distribution:");
+  println!("Grid distribution:");
 
-    for c in count {
-        let size = (*c as f64).sqrt().floor() as usize;
-        let mut points: Vec<delaunator::Point> = vec![];
+  for &c in count {
+    let size = (c as f64).sqrt().floor() as usize;
+    let mut points: Vec<Point> = Vec::new();
 
-        for i in 0..size {
-            for j in 0..size {
-                points.push(delaunator::Point {
-                    x: i as f64,
-                    y: j as f64,
-                });
-            }
-        }
-
-        let now = Instant::now();
-        let t = delaunator::triangulate(&points).expect("No triangulation exists for this input.");
-        let elapsed = now.elapsed();
-
-        report(points.len(), elapsed, &t);
+    for i in 0..size {
+      for j in 0..size {
+        points.push(Point::new(i as f64, j as f64));
+      }
     }
+
+    let now = Instant::now();
+    let t = Triangulation::new(&points).expect("No triangulation exists for this input.");
+    let elapsed = now.elapsed();
+
+    report(points.len(), elapsed, &t);
+  }
 }
 
 fn degenerate(count: &[usize]) {
-    println!("Degenerate distribution:");
+  println!("Degenerate distribution:");
 
-    for c in count {
-        let mut points: Vec<delaunator::Point> = vec![delaunator::Point { x: 0., y: 0. }];
-        for i in 0..*c {
-            let angle = 2. * f64::consts::PI * (i as f64) / (*c as f64);
-            points.push(delaunator::Point {
-                x: 1e10 * angle.sin(),
-                y: 1e10 * angle.cos(),
-            });
-        }
-
-        let now = Instant::now();
-        let t = delaunator::triangulate(&points).expect("No triangulation exists for this input.");
-        let elapsed = now.elapsed();
-
-        report(points.len(), elapsed, &t);
+  for &c in count {
+    let mut points: Vec<Point> = vec![Point { x: 0.0, y: 0.0 }];
+    for i in 0..c {
+      let angle = 2.0 * f64::consts::PI * (i as f64) / (c as f64);
+      points.push(Point::new(1e10 * angle.sin(), 1e10 * angle.cos()));
     }
+
+    let now = Instant::now();
+    let t = Triangulation::new(&points).expect("No triangulation exists for this input.");
+    let elapsed = now.elapsed();
+
+    report(points.len(), elapsed, &t);
+  }
 }
 
 fn main() {
-    let count: Vec<usize> = vec![20000, 100000, 200000, 500000, 1000000];
+  let count = [20000, 100000, 200000, 500000, 1000000];
 
-    gaussian(&count);
-    uniform(&count);
-    grid(&count);
-    degenerate(&count);
+  gaussian(&count);
+  uniform(&count);
+  grid(&count);
+  degenerate(&count);
 }

@@ -9,28 +9,27 @@ This package implements the Voronoi diagram construction as a dual of the Delaun
 extern crate voronator;
 extern crate rand;
 
-use voronator::VoronoiDiagram;
-use voronator::delaunator::Point;
-use rand::prelude::*;
 use rand::distributions::Uniform;
+use rand::prelude::*;
+use voronator::{Diagram, Point};
 
 fn main() {
-    let mut rng = rand::thread_rng();
-    let range1 = Uniform::new(0., 100.);
-    let range2 = Uniform::new(0., 100.);
-    let mut points: Vec<(f64, f64)> = (0..10)
-        .map(|_| (rng.sample(&range1), rng.sample(&range2)))
-        .collect();
+  let mut rng = rand::thread_rng();
+  let range1 = Uniform::new(0.0, 100.0);
+  let range2 = Uniform::new(0.0, 100.0);
+  let mut points: Vec<Point> = (0..10)
+    .map(|_| Point::new(rng.sample(&range1), rng.sample(&range2)))
+    .collect();
 
-    let diagram = VoronoiDiagram::<Point>::from_tuple(&(0., 0.), &(100., 100.), &points).unwrap();
-    
-    for cell in diagram.cells() {
-        let p: Vec<(f32, f32)> = cell.points().into_iter()
-            .map(|x| (x.x as f32, x.y as f32))
-            .collect();
-        
-        println!("{:?}", p);
-    }
+  let min = Point::new(0.0, 0.0);
+  let max = Point::new(100.0, 100.0);
+  let diagram = Diagram::new_voronoi(points, min, max).unwrap();
+
+  for cell in diagram.cells.iter() {
+    let p = cell.points.iter().copied().collect::<Vec<Point>>();
+
+    println!("{:?}", p);
+  }
 }
 ```
 Possible output:

@@ -1,133 +1,84 @@
 //! Provides functions for handling polygons.
 //!
-//! Polygons are stored as a Vec<Point>
-//! 
+//! Polygons are stored as a `Vec<Point>`.
+//!
 //! # Example
 //!
 //! ```no_run
 //! extern crate voronator;
-//! 
-//! use voronator::delaunator::Point;
+//!
+//! use voronator::Point;
 //! use voronator::polygon::Polygon;
 //!
 //! fn main() {
-//!     let points = vec![Point{x: 0., y: 0.}, Point{x: 1., y: 0.}, Point{x: 1., y: 1.}, Point{x: 0., y: 1.}];
-//!     let polygon = Polygon::from_points(points);
+//!   let points = vec![Point::new(0.0, 0.0), Point::new(1.0, 0.0), Point::new(1.0, 1.0), Point::new(0.0, 1.0)];
+//!   let polygon = Polygon::new(points);
 //! }
-//!
 
-use crate::delaunator::Coord;
+use crate::Point;
 
 /// Represents a polygon.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct Polygon<C: Coord> {
-    pub(crate) points: Vec<C>,
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Polygon {
+  /// The points that make up this polygon.
+  pub points: Vec<Point>
 }
 
-impl<C: Coord> Polygon<C> {
-    /// Create an empty polygon with no points.
-    pub fn new() -> Self {
-        Polygon { points: Vec::new() }
-    }
+impl Polygon {
+  /// Create a polygon consisting of the points supplied.
+  pub fn new(points: Vec<Point>) -> Self {
+    Polygon { points }
+  }
 
-    /// Create a polygon consisting of the points supplied.
-    pub fn from_points(points: Vec<C>) -> Self {
-        Polygon { points }
-    }
-
-    /// Return a slice of points representing the polygon.
-    pub fn points(&self) -> &[C] {
-        &self.points
-    }
-}
-
-fn inside<C: Coord>(p: &C, p1: &C, p2: &C) -> bool {
-    (p2.y() - p1.y()) * p.x() + (p1.x() - p2.x()) * p.y() + (p2.x() * p1.y() - p1.x() * p2.y()) < 0.0
-}
-
-fn intersection<C: Coord>(cp1: &C, cp2: &C, s: &C, e: &C) -> C {
-    let dc = C::from_xy(
-        cp1.x() - cp2.x(),
-        cp1.y() - cp2.y(),
-    );
-    let dp = C::from_xy(
-        s.x() - e.x(),
-        s.y() - e.y(),
-    );
-
-    let n1 = cp1.x() * cp2.y() - cp1.y() * cp2.x();
-    let n2 = s.x() * e.y() - s.y() * e.x();
-
-    let n3 = 1.0 / (dc.x() * dp.y() - dc.y() * dp.x());
-
-    C::from_xy(
-        (n1 * dp.x() - n2 * dc.x()) * n3,
-        (n1 * dp.y() - n2 * dc.y()) * n3,
-    )
+  /// Performs Sutherland-Hodgman clipping on this polygon.
+  pub fn clip(self, other: &Self) -> Self {
+    sutherland_hodgman(self, other)
+  }
 }
 
 /// Sutherland-Hodgman clipping modified from https://rosettacode.org/wiki/Sutherland-Hodgman_polygon_clipping#C.2B.2B
-pub fn sutherland_hodgman<C: Coord + Clone>(subject: &Polygon<C>, clip: &Polygon<C>) -> Polygon<C> {
-    let mut output_polygon = Polygon::new();
-    let mut input_polygon = Polygon::new();
+fn sutherland_hodgman(subject: Polygon, clip: &Polygon) -> Polygon {
+  let clip = clip.points.as_slice();
+  let mut output_polygon = subject.points;
 
-    //let mut clipped = false;
-    output_polygon.points.clone_from(&subject.points);
+  for j in 0..clip.len() {
+    let input_polygon = std::mem::take(&mut output_polygon);
 
-    let mut new_polygon_size = subject.points.len();
+    // Get clipping polygon edge
+    let cp1 = clip[j];
+    let cp2 = clip[(j + 1) % clip.len()];
 
-    for j in 0..clip.points.len() {
-        // copy new polygon to input polygon & set counter to 0
-        input_polygon.points.clear();
-        input_polygon.points.clone_from(&output_polygon.points);
+    for i in 0..input_polygon.len() {
+      // Get subject polygon edge
+      let s = input_polygon[i];
+      let e = input_polygon[(i + 1) % input_polygon.len()];
 
-        let mut counter = 0;
-        output_polygon.points.clear();
+      let v1 = crate::math::inside(s, cp1, cp2);
+      let v2 = crate::math::inside(e, cp1, cp2);
 
-        // get clipping polygon edge
-        let cp1 = &clip.points[j];
-        let cp2 = &clip.points[(j + 1) % clip.points.len()];
+      // Case 1: Both vertices are inside:
+      // Only the second vertex is added to the output list
+      if v1 && v2 {
+        output_polygon.push(e);
 
-        for i in 0..new_polygon_size {
-            // get subject polygon edge
-            let s = &input_polygon.points[i];
-            let e = &input_polygon.points[(i + 1) % new_polygon_size];
+      // Case 2: First vertex is outside while second one is inside:
+      // Both the point of intersection of the edge with the clip boundary
+      // and the second vertex are added to the output list
+      } else if !v1 && v2 {
+        output_polygon.push(crate::math::intersection(cp1, cp2, s, e));
+        output_polygon.push(e);
 
-            // Case 1: Both vertices are inside:
-            // Only the second vertex is added to the output list
-            if inside(s, cp1, cp2) && inside(e, cp1, cp2) {
-                output_polygon.points.push(e.clone());
-                counter += 1;
+      // Case 3: First vertex is inside while second one is outside:
+      // Only the point of intersection of the edge with the clip boundary
+      // is added to the output list
+      } else if v1 && !v2 {
+        output_polygon.push(crate::math::intersection(cp1, cp2, s, e));
+      }
 
-            // Case 2: First vertex is outside while second one is inside:
-            // Both the point of intersection of the edge with the clip boundary
-            // and the second vertex are added to the output list
-            } else if !inside(s, cp1, cp2) && inside(e, cp1, cp2) {
-                output_polygon.points.push(intersection(cp1, cp2, s, e));
-                output_polygon.points.push(e.clone());
-
-                //clipped = true;
-                counter += 1;
-                counter += 1;
-
-            // Case 3: First vertex is inside while second one is outside:
-            // Only the point of intersection of the edge with the clip boundary
-            // is added to the output list
-            } else if inside(s, cp1, cp2) && !inside(e, cp1, cp2) {
-                output_polygon.points.push(intersection(cp1, cp2, s, e));
-                //clipped = true;
-                counter += 1;
-
-                // Case 4: Both vertices are outside
-                //} else if !inside(s, cp1, cp2) && !inside(e, cp1, cp2) {
-                // No vertices are added to the output list
-            }
-        }
-        // set new polygon size
-        new_polygon_size = counter;
+      // Case 4: Both vertices are outside
+      // No vertices are added to the output list
     }
+  }
 
-    //println!("Clipped? {}", clipped);
-
-    output_polygon
+  Polygon::new(output_polygon)
 }
