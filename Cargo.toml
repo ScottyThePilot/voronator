@@ -14,7 +14,7 @@ default = ["rayon"]
 rayon = ["maybe_parallel_iterator/rayon"]
 
 [dependencies]
-glam = { version = "0.24" }
+glam = { version = "0.25" }
 maybe_parallel_iterator = "0.12.0"
 
 [dev-dependencies]
